@@ -2,6 +2,8 @@
 
 [English version: README.en.md](./README.en.md)
 
+> **本项目由 Claude Code (DeepSeek V4 Pro 后端) 协助完成**，在 [wuzf/claude-channels-patch](https://github.com/wuzf/claude-channels-patch) 的基础上，由 AI 辅助修改适配 Claude Code v2.1.179+。
+>
 > **免责声明**：本项目仅供学习和研究使用。请勿将其用于你不拥有或未获授权分析的软件或服务。
 
 这是一个针对 **Claude Code** 的二进制补丁，可在无需 `claude.ai` OAuth 认证的情况下启用 `--channels` 功能。
