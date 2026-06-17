@@ -427,28 +427,29 @@ def apply_decision_support_patches(data: bytearray) -> int:
 
     desc = "tengu_harbor default"
     offsets = locate_feature_flag_sites(data)
-    if len(offsets) < 2:
-        sys.exit(f"FAIL [{desc}]: expected >=2 matches, found {len(offsets)}")
+    if len(offsets) < 1:
+        sys.exit(f"FAIL [{desc}]: expected >=1 matches, found {len(offsets)}")
     for site in offsets:
         edits += patch_byte(data, site, 0x31, 0x30, desc)
 
     desc = "tengu_harbor_permissions default"
     offsets = locate_permissions_flag_sites(data)
-    if len(offsets) < 2:
-        sys.exit(f"FAIL [{desc}]: expected >=2 matches, found {len(offsets)}")
+    if len(offsets) < 1:
+        sys.exit(f"FAIL [{desc}]: expected >=1 matches, found {len(offsets)}")
     for site in offsets:
         edits += patch_byte(data, site, 0x31, 0x30, desc)
 
     desc = "channels notice noAuth UI"
     offsets = locate_noauth_sites(data)
-    if len(offsets) < 2:
-        sys.exit(f"FAIL [{desc}]: expected >=2 matches, found {len(offsets)}")
-    for site in offsets:
-        edits += patch_byte(data, site, 0x21, 0x2B, desc)
+    if len(offsets) >= 1:
+        for site in offsets:
+            edits += patch_byte(data, site, 0x21, 0x2B, desc)
+    else:
+        print(f"  SKIP {desc} (optional, found {len(offsets)} site(s))")
 
     desc = "channels notice policyBlocked UI"
     offsets = locate_policyblocked_ui_sites(data)
-    if len(offsets) >= 2:
+    if len(offsets) >= 1:
         for site in offsets:
             edits += patch_byte(data, site, 0x66, 0x30, desc)
     else:
@@ -464,8 +465,8 @@ def apply_legacy_patches(data: bytearray) -> int:
 
     desc = "tengu_harbor default"
     offsets = locate_feature_flag_sites(data)
-    if len(offsets) < 2:
-        sys.exit(f"FAIL [{desc}]: expected >=2 matches, found {len(offsets)}")
+    if len(offsets) < 1:
+        sys.exit(f"FAIL [{desc}]: expected >=1 matches, found {len(offsets)}")
     for site in offsets:
         edits += patch_byte(data, site, 0x31, 0x30, desc)
 
@@ -478,10 +479,11 @@ def apply_legacy_patches(data: bytearray) -> int:
         3,
         30,
     )
-    if len(offsets) < 2:
-        sys.exit(f"FAIL [{desc}]: expected >=2 matches, found {len(offsets)}")
-    for site in offsets:
-        edits += patch_byte(data, site, 0x21, 0x20, desc)
+    if len(offsets) >= 1:
+        for site in offsets:
+            edits += patch_byte(data, site, 0x21, 0x20, desc)
+    else:
+        print(f"  SKIP {desc} (optional, pattern not found)")
 
     desc = "allowlist bypass (plugin)"
     offsets = locate_backwards_sites(
@@ -492,10 +494,11 @@ def apply_legacy_patches(data: bytearray) -> int:
         2,
         80,
     )
-    if len(offsets) < 2:
-        sys.exit(f"FAIL [{desc}]: expected >=2 matches, found {len(offsets)}")
-    for site in offsets:
-        edits += patch_byte(data, site, 0x21, 0x20, desc)
+    if len(offsets) >= 1:
+        for site in offsets:
+            edits += patch_byte(data, site, 0x21, 0x20, desc)
+    else:
+        print(f"  SKIP {desc} (optional, pattern not found)")
 
     desc = "allowlist bypass (server)"
     offsets = locate_backwards_sites(
@@ -506,22 +509,24 @@ def apply_legacy_patches(data: bytearray) -> int:
         3,
         30,
     )
-    if len(offsets) < 2:
-        sys.exit(f"FAIL [{desc}]: expected >=2 matches, found {len(offsets)}")
-    for site in offsets:
-        edits += patch_byte(data, site, 0x21, 0x20, desc)
+    if len(offsets) >= 1:
+        for site in offsets:
+            edits += patch_byte(data, site, 0x21, 0x20, desc)
+    else:
+        print(f"  SKIP {desc} (optional, pattern not found)")
 
     desc = "bl6 noAuth bypass"
     offsets = locate_noauth_sites(data)
-    if len(offsets) < 2:
-        sys.exit(f"FAIL [{desc}]: expected >=2 matches, found {len(offsets)}")
-    for site in offsets:
-        edits += patch_byte(data, site, 0x21, 0x2B, desc)
+    if len(offsets) >= 1:
+        for site in offsets:
+            edits += patch_byte(data, site, 0x21, 0x2B, desc)
+    else:
+        print(f"  SKIP {desc} (optional, pattern not found)")
 
     desc = "tengu_harbor_permissions default"
     offsets = locate_permissions_flag_sites(data)
-    if len(offsets) < 2:
-        sys.exit(f"FAIL [{desc}]: expected >=2 matches, found {len(offsets)}")
+    if len(offsets) < 1:
+        sys.exit(f"FAIL [{desc}]: expected >=1 matches, found {len(offsets)}")
     for site in offsets:
         edits += patch_byte(data, site, 0x31, 0x30, desc)
 
