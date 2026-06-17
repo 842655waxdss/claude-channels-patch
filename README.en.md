@@ -1,198 +1,80 @@
-# claude-channels-patch
+# claude-channels-patch (v2.1.179+ fork)
 
-> Disclaimer: This project is provided for learning and research purposes only.
-> Do not use it on software or services you do not own or do not have permission to analyze.
+> **This project was created with AI assistance (Claude Code / DeepSeek V4 Pro backend)**, forked from [wuzf/claude-channels-patch](https://github.com/wuzf/claude-channels-patch) and adapted for Claude Code v2.1.179+.
+>
+> **Disclaimer**: This project is for educational and research purposes only. Do not use on software you do not own or are not authorized to analyze.
 
-Binary patch for **Claude Code** that enables the `--channels` feature without requiring claude.ai OAuth authentication.
+A binary patch for **Claude Code** that enables `--channels` without claude.ai OAuth authentication.
 
-## What it does
+## What It Does
 
-Claude Code's `--channels` flag lets MCP servers push real-time messages into your session, for example, a Telegram bot plugin can forward chat messages directly to Claude. However, this feature is gated behind three checks:
+Claude Code's `--channels` feature is gated by three layers:
 
-| Gate | What it checks | Why it blocks |
-|------|---------------|---------------|
-| **Feature flags** | `tengu_harbor` and `tengu_harbor_permissions` via GrowthBook | Default to `false`; unreachable when `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` |
-| **OAuth** | `accessToken` check | Requires claude.ai login; blocks API key / third-party proxy users |
-| **Allowlist** | Channel allowlist ledger | Server-side approved list is empty without GrowthBook |
+| Layer | Check | Block Reason |
+|------|------|------|
+| **Feature Flag** | GrowthBook `tengu_harbor` / `tengu_harbor_permissions` | Defaults to `false`; API key / proxy users can't reach GrowthBook |
+| **OAuth** | `accessToken` check | Third-party backend users (DeepSeek, etc.) don't have claude.ai tokens |
+| **Allowlist** | Plugin/server whitelist | Unofficial plugins (e.g., WeChat weixin) not on the list |
 
-By default, the script first tries a whole decision-function patch that preserves the MCP capability check and forces channel registration. If that cannot be located safely, it falls back to the original equal-length byte edits.
+This patch bypasses these restrictions by modifying the binary.
 
 ## Requirements
 
-- **Python 3.10+**
+- Python 3.10+
+- Claude Code v2.1.80+
 
 ## Compatibility
 
-- This script is intended for **Claude Code v2.1.80 and above**; tested on **2.1.81** and **2.1.83** on Windows, Linux, and macOS
-- On macOS, the script now performs an ad-hoc `codesign` after patching; this is especially important on Apple Silicon (`arm64`), where an invalid signature can cause the binary to be killed immediately
-- There is currently no local Mac M-series test machine available, so the Apple Silicon path has not been re-verified on maintainer-owned hardware
-- Uses **stable string anchors** (property names, return values, string literals) - no dependency on minified variable names
-- Auto-detects binaries from the official install methods (**Native Install**, **Homebrew**, **WinGet**) and patches them all
-- Supports standalone version-suffixed binary names such as `2.1.85`; the backup is written alongside it as `2.1.85.bak`
-- If your installation lives in a custom location, use `python patch.py --binary /path/to/claude`
-- The patch will refuse to apply if the expected code patterns are not found
+- ✅ Claude Code v2.1.179 (tested)
+- ✅ Windows / Linux / macOS
+- ✅ Third-party API proxy users (DeepSeek backend verified)
+- ✅ Auto-detect Native Install / Homebrew / WinGet
 
 ## Usage
 
 ```bash
-# Apply patch (auto-detects all installed binaries)
-python patch.py
+git clone git@github.com:842655waxdss/claude-channels-patch.git
+cd claude-channels-patch
 
-# Check detected binaries and chosen patch strategy without modifying files
-python patch.py --check
-
-# Apply to a specific binary path
-python patch.py --binary /path/to/claude
-
-# Force the whole decision-function strategy
-python patch.py --strategy decision
-
-# Force the legacy byte-edit fallback
-python patch.py --strategy legacy
-
-# Revert to original
-python patch.py revert
+python patch.py                    # auto-detect and apply
+python patch.py --check            # dry run
+python patch.py --binary <path>    # specific binary
+python patch.py revert             # restore from backup
 ```
 
-### macOS code-signing note
+## How It Works
 
-Modifying a Mach-O binary on macOS invalidates the original code signature. The current `patch.py` now performs ad-hoc re-signing on Darwin regardless of the Python process architecture, which also covers running the script under Rosetta or an x86_64 Python on an Apple Silicon machine.
+### Core: Bun Source Fallback
 
-Apple Silicon (`arm64`) is especially sensitive to invalid signatures, so this step matters most there. That said, there is currently no Mac M-series machine available in the maintainer's local environment, so this path still lacks maintainer-run real-device regression testing.
+Claude Code is a Node.js SEA (Single Executable Application). The patch replaces `@bytecode` markers with `@source__`, forcing the runtime to execute modified source code instead of compiled bytecode.
 
-If you are using an older script version, or need to re-sign manually, run:
+### Feature Flag Default Override
 
-```bash
-codesign --remove-signature /path/to/claude
-codesign -s - /path/to/claude
-```
+Changes `tengu_harbor` and `tengu_harbor_permissions` defaults from `false` to `true`, enabling channels even when GrowthBook is unreachable.
 
-After patching, start Claude Code with channels:
+### Allowlist Bypass
 
-```bash
-claude --channels plugin:telegram@claude-plugins-official
-```
+Inverts the server-side allowlist check condition so that unlisted plugins can register.
 
-## How it works
+### v2.1.179 Adaptations
 
-The Claude Code binary is a Node.js SEA (Single Executable Application) containing two copies of a bundled JS file. The script supports two patch strategies and, in `auto` mode, prefers the more semantic one first:
-
-### 1. Decision-function patch (default)
-
-The script looks for the channel decision function, keeps the first `claude/channel` capability check intact, and rewrites the rest of the function body so it returns `register`. This is closer to the behavior of "keep the protocol check, remove the business gates".
-
-Regardless of strategy, the script also updates the Bun runtime fallback used by newer builds: it flips `// @bun @bytecode` to `// @bun @source__` so runtime execution uses the patched source copy. The `bun bytecode fallback` state is also included in `--check` classification as `clean`, `patched`, or `mixed`.
-
-You can inspect what the script would do without modifying anything:
-
-```bash
-python patch.py --check
-```
-
-### 2. Legacy fallback byte patch
-
-If the decision function cannot be located safely, the script falls back to 6 stable code-pattern edits across both bundled copies (12 edits total):
-
-### 2.1 Feature flag default: `!1` -> `!0`
-
-```javascript
-// Before
-function waH() { return l$("tengu_harbor", !1) }  // default = false
-
-// After
-function waH() { return l$("tengu_harbor", !0) }  // default = true
-```
-
-The `l$` function reads feature flags from GrowthBook (Anthropic's remote config). When `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` is set, GrowthBook is unreachable and `l$` returns the default value. Changing the default from `false` to `true` enables the feature.
-
-### 2.2 Permissions feature flag default: `!1` -> `!0`
-
-```javascript
-// Before
-return l$("tengu_harbor_permissions", !1)  // default = false
-
-// After
-return l$("tengu_harbor_permissions", !0)  // default = true
-```
-
-Newer Claude Code builds also consult `tengu_harbor_permissions`. The script flips it alongside `tengu_harbor` so the main channels gate and the permission-related path do not drift apart.
-
-### 2.3 OAuth gate: `if(!` -> `if( `
-
-```javascript
-// Before - in B6f() channel registration
-if (!SL()?.accessToken)
-  return { action: "skip", kind: "auth", ... };
-
-// After
-if ( SL()?.accessToken)   // condition inverted, never skips
-  return { action: "skip", kind: "auth", ... };
-```
-
-`SL()?.accessToken` reads the claude.ai OAuth token. API key users don't have one, so it returns `undefined`. Removing the `!` means the condition is `if(undefined)` which is falsy, the skip block never executes.
-
-### 2.4 Allowlist check (plugin): `&&!` -> `&& `
-
-```javascript
-// Before
-if (!D.dev && !KaH().some((L) => L.plugin === D.name && L.marketplace === D.marketplace))
-  return { action: "skip", kind: "allowlist", ... };
-
-// After
-if (!D.dev &&  KaH().some(...))  // inverted: skips only if ON the allowlist
-  return { action: "skip", kind: "allowlist", ... };
-```
-
-Removing the `!` before the allowlist lookup inverts the check: it now skips only plugins that are on the allowlist, letting non-allowlisted plugins through.
-
-### 2.5 Allowlist check (server): `if(!` -> `if( `
-
-```javascript
-// Before
-else if (!D.dev) return { action: "skip", kind: "allowlist", ... };
-
-// After
-else if ( D.dev) return { action: "skip", kind: "allowlist", ... };
-```
-
-`D.dev` is `undefined` for production plugins, so `if( D.dev)` is always falsy, the skip never executes.
-
-### 2.6 noAuth state: `noAuth:!` -> `noAuth:+`
-
-```javascript
-// Before
-noAuth: !SL()?.accessToken   // true when no OAuth token
-
-// After
-noAuth: +SL()?.accessToken   // +undefined -> NaN (falsy) - treated as not-noAuth
-```
-
-### Why two copies?
-
-The binary embeds the JS bundle twice (main thread and worker). Every patch is applied at both offsets to ensure consistency.
-
-## Legacy patch summary
-
-| # | Anchor | Byte change | Purpose |
-|---|--------|-------------|---------|
-| 1 | `tengu_harbor",!1)}` | `1` -> `0` | Feature flag default |
-| 2 | `tengu_harbor_permissions",!1)}` | `1` -> `0` | Permissions feature flag default |
-| 3 | `?.accessToken)return{action:"skip",kind:"auth"` | `!` -> ` ` | OAuth bypass |
-| 4 | `.marketplace))return{action:"skip",kind:"allowlist"` | `!` -> ` ` | Plugin allowlist bypass |
-| 5 | `)return{action:"skip",kind:"allowlist",reason:\`server` | `!` -> ` ` | Server allowlist bypass |
-| 6 | `noAuth:!` | `!` -> `+` | UI noAuth state |
+Newer Claude Code versions (v2.1.179+) restructured some code paths, merging dual bundles into one and changing auth-related patterns. This fork:
+- Relaxes pattern match thresholds from >=2 to >=1
+- Makes auth/noAuth/bypasses optional (skip gracefully if pattern not found)
+- Relies on bun source fallback + feature flag patches as the primary bypass mechanism
 
 ## Safety
 
-- **Backup**: The original binary is saved as `*.bak` before any modification
-- **Pattern matching**: Locates targets dynamically - no hardcoded offsets, no silent corruption
-- **Atomic write**: Uses temp file + `os.replace()` to avoid corrupting a running binary
-- **Revertible**: `python patch.py revert` restores all binaries at any time
-
-## Links
-
-- [linux.do](https://linux.do/)
+- Automatically creates `.bak` backup before modification
+- Atomic writes via temp file + `os.replace()`
+- `python patch.py revert` to restore
+- All patches use pattern matching, no hardcoded offsets
 
 ## License
 
 MIT
+
+## Credits
+
+- Original: [wuzf/claude-channels-patch](https://github.com/wuzf/claude-channels-patch)
+- Haleclipse: [Claude Code Channels 工人能智版](https://linux.do/t/topic/1787422)
